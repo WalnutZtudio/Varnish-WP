@@ -61,6 +61,37 @@ sub vcl_recv {
     }
 */
 
+    # Purge request check sections for hash_always_miss, purge and ban
+    # BLOCK IF NOT IP is not in purge acl
+    # ##########################################################
+
+    # Enable smart refreshing using hash_always_miss
+    if (req.http.Cache-Control ~ "no-cache") {
+        if (client.ip ~ purge || std.ip(req.http.X-Actual-IP, "1.2.3.4") ~ purge) {
+            set req.hash_always_miss = true;
+        }
+    }
+
+    if (req.method == "PURGE") {
+        if (!client.ip ~ purge || !std.ip(req.http.X-Actual-IP, "1.2.3.4") ~ purge) {
+            return(synth(405,"Not allowed."));
+            }
+        return (purge);
+    }
+
+    if (req.method == "BAN") {
+            # Same ACL check as above:
+            if (!client.ip ~ purge || !std.ip(req.http.X-Actual-IP, "1.2.3.4") ~ purge) {
+                            return(synth(403, "Not allowed."));
+            }
+            ban("req.http.host == " + req.http.host +
+                    " && req.url == " + req.url);
+
+            # Throw a synthetic page so the
+            # request won't go to the backend.
+            return(synth(200, "Ban added"));
+    }
+
     # LetsEncrypt Certbot passthrough
     if (req.url ~ "^/\.well-known/acme-challenge/") {
         return (pass);
